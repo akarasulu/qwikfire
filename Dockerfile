@@ -18,4 +18,4 @@ RUN poetry install --no-interaction --no-ansi --no-root --no-dev
 # Copy Python code to the Docker image
 COPY qwikfire /code/qwikfire/
 
-CMD [ "python", "qwikfire/foo.py"]
+CMD [ "python", "qwikfire/qwikfire.py"]

@@ -1,1 +1,1 @@
-::: qwikfire.foo
+::: qwikfire.qwikfire
