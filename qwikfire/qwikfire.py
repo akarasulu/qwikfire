@@ -1,4 +1,4 @@
-# trunk-ignore-all(ruff/PGH003,ruff/F821)
+# trunk-ignore-all(ruff/PGH003)
 import logging
 import re
 from functools import wraps
@@ -14,17 +14,17 @@ VARS_RE = re.compile("\\{\\{\\s*(\\w+)\\s*\\}\\}")
 """Regex pattern for Jinja style variable substitution blocks"""
 
 
-class QuickFireException(Exception):
+class QwikFireException(Exception):
   """The root class of the exception hierarchy.
 
-  Users can use this exception directly with @quickfire annotations. Best to subclass it
-  with specific meaning for the package or application quickfire is being used on.
+  Users can use this exception directly with @qwikfire annotations. Best to subclass it
+  with specific meaning for the package or application qwikfire is being used on.
 
   Args:
       Exception (_type_): create domain specific exceptions extending this class
   """
   def __init__(self, message: str, e: Exception, annotated_instance: Any):
-    """Creates a new QuickFireException wrapper exception. Used directly in annotations
+    """Creates a new QwikFireException wrapper exception. Used directly in annotations
     or subclassed for package and application specific exceptions.
 
     Args:
@@ -50,25 +50,25 @@ class QuickFireException(Exception):
     """Gets the instance of the annotated class.
 
     Returns:
-        Any: instance of the class annotated with the @quickfire decorator annotation
+        Any: instance of the class annotated with the @qwikfire decorator annotation
     """
     return self._annotated_instance
 
   @property
   def result(self) -> Any:
-    """Gets the QuickFireResults object.
+    """Gets the QwikFireResults object.
 
     TODO: Due to an ordering problem in this file (and the dependency between
-    QuickFireException and QuickFireResults) the result property uses Any.
+    QwikFireException and QwikFireResults) the result property uses Any.
 
     Returns:
-        Any: the QuickFireResults with or without the command producing this exception
+        Any: the QwikFireResults with or without the command producing this exception
     """
     return self._result
 
   @result.setter
   def result(self, result: Any) -> None:
-    """Sets the QuickFireResult object collected before this exception was raised."""
+    """Sets the QwikFireResult object collected before this exception was raised."""
     self._result = result
 
 """Callable return Generic Type"""
@@ -78,14 +78,14 @@ _P = ParamSpec('_P')
 """Alias for generalized Callable"""
 GFunc = Callable[...,Any]
 
-def quickfire(e: type[QuickFireException], *command: str) -> GFunc:
+def qwikfire(e: type[QwikFireException], *command: str) -> GFunc:
   """Decorator factory function to capture arguments"""
-  def decorator(function: Callable[Concatenate[Any,QuickFire,_P], _T]) -> GFunc:
+  def decorator(function: Callable[Concatenate[Any,QwikFire,_P], _T]) -> GFunc:
     """Decorator function itself"""
     @wraps(function)
     def wrapper(self: Any, *args: _P.args, **kwargs: _P.kwargs) -> _T:
       """The wrapper function calling target"""
-      qf = QuickFire(function, e, *command)
+      qf = QwikFire(function, e, *command)
       return function(self, qf, *args, **kwargs)
     return wrapper
   return decorator
@@ -105,11 +105,11 @@ def _substitute_all(command: str, **kwargs: Any) -> str:
   return substituted
 
 
-class QuickFireResult:
-  """The run results of both single and multiple commands in an @quickfire annotation
+class QwikFireResult:
+  """The run results of both single and multiple commands in an @qwikfire annotation
   """
   def __init__(self, annotated_instance: Any, commands :RunningCommand):
-    """Creates an instance of QuickFireResult with its first mandatory command
+    """Creates an instance of QwikFireResult with its first mandatory command
 
     Args:
         annotated_instance (Any): the instance of the class whose methods are annotated
@@ -250,20 +250,20 @@ class QuickFireResult:
     return self.concat_stderr().decode(encoding) # type: ignore
 
 
-class QuickFire:
+class QwikFire:
   """Rapidly fires off short lived, synchronous, blocking, sequential shell commands in
   a working directory with exception handling, and logging.
   """
 
-  def __init__(self, function: GFunc, e: type[QuickFireException], *commands: str):
-    """Creates a new instance of QuickFire within the decorator for the annotated method
+  def __init__(self, function: GFunc, e: type[QwikFireException], *commands: str):
+    """Creates a new instance of QwikFire within the decorator for the annotated method
 
     Args:
         function (Callable[_P, _T]): the annotated decorated function
-        e (type[QuickFireException]): the wrapper exception type
+        e (type[QwikFireException]): the wrapper exception type
         *commands (str): the string array of commands to execute
     """
-    self._exception: Final[type[QuickFireException]] = e
+    self._exception: Final[type[QwikFireException]] = e
     LOG.debug(f"__init__():  re-raised exception = {e.__name__}")
     self._commands = commands
     LOG.debug(f"__init__():  annotation commands = {commands}")
@@ -275,15 +275,15 @@ class QuickFire:
     return self._function
 
   @property
-  def raises(self) -> type[QuickFireException]:
+  def raises(self) -> type[QwikFireException]:
     """Gets the wrapper exception class raised
 
     Returns:
-        type[QuickFireException]: either QuickFireException or a subclass
+        type[QwikFireException]: either QwikFireException or a subclass
     """
     return self._exception
 
-  def _run(self, cmd: str, qfr: QuickFireResult|None, annotated_instance: Any, **kwargs: Any) -> QuickFireResult:
+  def _run(self, cmd: str, qfr: QwikFireResult|None, annotated_instance: Any, **kwargs: Any) -> QwikFireResult:
     # extract _xxxx kwargs intended for pass through to sh.Command
     sh_args: dict[str,Any] = {}
     for arg in kwargs:
@@ -323,19 +323,19 @@ class QuickFire:
 
     # create a QFR inst if not already created and append each command's results
     if qfr is None:
-      qfr = QuickFireResult(annotated_instance, result) # type: ignore
+      qfr = QwikFireResult(annotated_instance, result) # type: ignore
     else:
       qfr.append(result) # type: ignore
     return qfr
 
-  def run(self, annotated_instance: Any, **kwargs: Any) -> QuickFireResult:
-    """Runs one or more commands in the @quickfire method annotation
+  def run(self, annotated_instance: Any, **kwargs: Any) -> QwikFireResult:
+    """Runs one or more commands in the @qwikfire method annotation
 
     Args:
         annotated_instance (Any): the instance of the annotated user defined class
 
     Returns:
-        QuickFireResult: the result of running the command[s]
+        QwikFireResult: the result of running the command[s]
     """
     # use sh_defaults if provided by the annotated user defined class
     sh_defaults = getattr(annotated_instance, "sh_defaults", None)

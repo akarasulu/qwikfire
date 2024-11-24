@@ -4,38 +4,30 @@ from types import NoneType
 from typing import Any
 
 import pytest
+import sh
 
-from qwikfire.qwikfire import QuickFire, QuickFireException, QuickFireResult, quickfire
+from qwikfire.qwikfire import QwikFire, QwikFireException, QwikFireResult, qwikfire
 
 LOG = logging.getLogger()
 LOG.setLevel(logging.DEBUG)
 
-class WrappingException(QuickFireException):
+class WrappingException(QwikFireException):
   def __init__(self, message: str, e: Exception, annotated_instance: Any):
     super().__init__(message, e, annotated_instance)
 
 # logic accounting for pydevd (vscode debugger) messages inserted into stderr
-def check_stderr(result: QuickFireResult, expecting_data: bool):
+def check_stderr(result: QwikFireResult, expecting_data: bool):
   if expecting_data and result.stderr:
-  # we're expecting valid data and there is data in stderr
-    if "pydevd: Sending message" in result.stderr:
-    # but we have pydevd garbage in there
-      return False
-    else:
-    # no pydevd garbage but other content return true
-      return True
-  elif expecting_data:
-  # expecting data in the stderr stream but none is there
-    return False
+    # we're expecting valid data and there is data in stderr
+    return "pydevd: Sending message" not in result.stderr
   else:
-  # NOT expecting data in the stderr stream, and none is there
-    return True
+    return not expecting_data
 
 class AnnotatedTestClassNoShDefaults:
-  @quickfire(WrappingException, "echo fubar")
-  def single_novars(self, qf: QuickFire) -> str:
-    LOG.debug(f"got QuickFire instance: {qf}")
-    proc: QuickFireResult = qf.run(self, _env={})
+  @qwikfire(WrappingException, "echo fubar")
+  def single_novars(self, qf: QwikFire) -> str:
+    LOG.debug(f"got QwikFire instance: {qf}")
+    proc: QwikFireResult = qf.run(self, _env={})
     assert proc.result() == proc.result(0)
     assert check_stderr(proc, False)
     assert qf.function.__name__ == 'single_novars'
@@ -51,11 +43,11 @@ class AnnotatedTestClass:
     defaults['new_var']="add me in"
     return defaults
 
-  @quickfire(WrappingException, "eko fubar")
-  def raise_exception(self, qf: QuickFire) -> str:
-    LOG.debug(f"got QuickFire instance: {qf}")
+  @qwikfire(WrappingException, "eko fubar")
+  def raise_exception(self, qf: QwikFire) -> str:
+    LOG.debug(f"got QwikFire instance: {qf}")
     try:
-      proc: QuickFireResult = qf.run(self, _env={})
+      proc: QwikFireResult = qf.run(self, _env={})
     except WrappingException as we:
       LOG.exception("Exception caught")
       assert we.exception.__class__ == sh.CommandNotFound
@@ -63,56 +55,56 @@ class AnnotatedTestClass:
       raise we from None
     return proc.stripped
 
-  @quickfire(WrappingException, "echo fubar")
-  def single_novars(self, qf: QuickFire) -> str:
-    LOG.debug(f"got QuickFire instance: {qf}")
-    proc: QuickFireResult = qf.run(self, _env={})
+  @qwikfire(WrappingException, "echo fubar")
+  def single_novars(self, qf: QwikFire) -> str:
+    LOG.debug(f"got QwikFire instance: {qf}")
+    proc: QwikFireResult = qf.run(self, _env={})
     assert proc.result() == proc.result(0)
     assert check_stderr(proc, False)
     assert proc.exit_codes == 0
     assert qf.raises == WrappingException
     return proc.stripped
 
-  @quickfire(WrappingException, "echo {{test_var}}")
-  def single_onevar(self, qf: QuickFire) -> str:
+  @qwikfire(WrappingException, "echo {{test_var}}")
+  def single_onevar(self, qf: QwikFire) -> str:
     return qf.run(self).stripped # value comes from sh_defaults
 
-  @quickfire(WrappingException, "echo {{test_var  }}")
-  def single_onevar1(self, qf: QuickFire) -> str:
+  @qwikfire(WrappingException, "echo {{test_var  }}")
+  def single_onevar1(self, qf: QwikFire) -> str:
     return qf.run(self, test_var="not again 1").stripped
 
-  @quickfire(WrappingException, "echo {{  test_var}}")
-  def single_onevar2(self, qf: QuickFire) -> str:
+  @qwikfire(WrappingException, "echo {{  test_var}}")
+  def single_onevar2(self, qf: QwikFire) -> str:
     return qf.run(self, test_var="not again 2").stripped
 
-  @quickfire(WrappingException, "echo {{   test_var   }}")
-  def single_onevar3(self, qf: QuickFire) -> str:
+  @qwikfire(WrappingException, "echo {{   test_var   }}")
+  def single_onevar3(self, qf: QwikFire) -> str:
     return qf.run(self, test_var="not  again   3 ").stripped
 
-  @quickfire(WrappingException, 'echo "{{   test_var   }}"')
-  def single_onevar4(self, qf: QuickFire) -> str:
+  @qwikfire(WrappingException, 'echo "{{   test_var   }}"')
+  def single_onevar4(self, qf: QwikFire) -> str:
     return qf.run(self, test_var=" not  again   4 ").stripped
 
-  @quickfire(WrappingException, 'echo "{{   test_var   }}"')
-  def single_onevar5(self, qf: QuickFire) -> str:
+  @qwikfire(WrappingException, 'echo "{{   test_var   }}"')
+  def single_onevar5(self, qf: QwikFire) -> str:
     result = qf.run(self, test_var=" not  again   5 ")
     assert result.stripped != result.stdout
     # without the lstrip() and rstrip()
     return result.stdout
 
-  @quickfire(WrappingException, "echo {{fee}} {{fii}} {{foe}} {{fum}}")
-  def single_manyvars(self, qf: QuickFire) -> str:
+  @qwikfire(WrappingException, "echo {{fee}} {{fii}} {{foe}} {{fum}}")
+  def single_manyvars(self, qf: QwikFire) -> str:
     result = qf.run(self, fee="I smell the blood of ", fii=5,
       foe="Englishmen,", fum="yummy!")
     assert result.concat_stderr() == b''
     return result.stripped
 
-  @quickfire(WrappingException, "echo hello", "echo world")
-  def many_novars(self, qf: QuickFire) -> str:
+  @qwikfire(WrappingException, "echo hello", "echo world")
+  def many_novars(self, qf: QwikFire) -> str:
     return qf.run(self).stripped
 
-  @quickfire(WrappingException, "echo {{hello_var}}", "echo {{world_var}}")
-  def many_twovar(self, qf: QuickFire) -> str:
+  @qwikfire(WrappingException, "echo {{hello_var}}", "echo {{world_var}}")
+  def many_twovar(self, qf: QwikFire) -> str:
     result = qf.run(self, hello_var="hello", world_var="world")
     assert not result.concat_stderr()
     assert len(result.results) == 2 # type: ignore
@@ -122,8 +114,8 @@ class AnnotatedTestClass:
     assert len(result.stderr) == 0
     return result.stripped
 
-  @quickfire(WrappingException, "true", "false")
-  def many_novar_fail(self, qf: QuickFire) -> None:
+  @qwikfire(WrappingException, "true", "false")
+  def many_novar_fail(self, qf: QwikFire) -> None:
     qf.run(self, hello_var="hello", world_var="world")
 
 def test_single_novars():
@@ -155,7 +147,7 @@ def test_exception():
     tc.raise_exception()
   LOG.error(f"excinfo caught = {excinfo}")
   assert isinstance(excinfo.value, WrappingException)
-  assert excinfo.value.result.__class__ is QuickFireResult or NoneType
+  assert excinfo.value.result.__class__ is QwikFireResult or NoneType
   assert str(excinfo.value) == "Failed executing command 'eko fubar'"
 
 def test_many_novar_fail():
@@ -164,5 +156,5 @@ def test_many_novar_fail():
     tc.many_novar_fail()
   LOG.error(f"excinfo caught = {excinfo}")
   assert isinstance(excinfo.value, WrappingException)
-  assert excinfo.value.result.__class__ is QuickFireResult or NoneType
+  assert excinfo.value.result.__class__ is QwikFireResult or NoneType
   assert str(excinfo.value) == "Failed executing command 'false'"
