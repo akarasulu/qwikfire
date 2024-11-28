@@ -19,7 +19,7 @@ pytest = "^7.2.0"
 pytest-cov = "^4.0.0"
 deptry = "^0.16.2"
 pyright = "^1.1.382"
-# pre-commit = "^3.4.0"
+pre-commit = "^3.4.0"
 tox = "^4.11.1"
 
 [tool.poetry.group.docs.dependencies]
@@ -31,11 +31,11 @@ mkdocstrings = {extras = ["python"], version = "^0.26.1"}
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-
-
 [tool.pyright]
 include = ["qwikfire"]
 typeCheckingMode = "strict"
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
 venvPath = "."
 venv = ".venv"
 
@@ -43,6 +43,7 @@ venv = ".venv"
 testpaths = ["tests"]
 
 [tool.ruff]
+exclude = ["typings"]
 target-version = "py39"
 line-length = 120
 fix = true
