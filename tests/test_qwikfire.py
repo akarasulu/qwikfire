@@ -1,7 +1,7 @@
 # trunk-ignore-all(bandit/B101,ruff/PGH003)
 import logging
 from types import NoneType
-from typing import Any
+from typing import Any, Callable
 
 import pytest
 import sh
@@ -40,11 +40,13 @@ class AnnotatedTestClassNoShDefaults:
 
 
 class AnnotatedTestClass:
-    def sh_defaults(self) -> dict[str, Any]:
+    def sh_defaults(self, method: Callable[..., Any]) -> dict[str, Any]:
         defaults: dict[str, Any] = {}
         defaults["test_var"] = "one more time"
         defaults["hello_var"] = "oh no"
         defaults["new_var"] = "add me in"
+        defaults["method"] = method.__name__
+        LOG.debug("sh_defaults(): method = '%s'", method.__name__)
         return defaults
 
     @qwikfire(WrappingException, "eko fubar")
@@ -118,8 +120,8 @@ class AnnotatedTestClass:
         return result.stripped
 
     @qwikfire(WrappingException, "true", "false")
-    def many_novar_fail(self, qf: QwikFire) -> None:
-        qf.run(self, hello_var="hello", world_var="world")
+    def many_novar_fail(self, qf: QwikFire) -> QwikFireResult:
+        return qf.run(self, hello_var="hello", world_var="world")
 
 
 def test_single_novars():
@@ -155,16 +157,24 @@ def test_exception():
     with pytest.raises(WrappingException) as excinfo:
         tc = AnnotatedTestClass()
         tc.raise_exception()
-    LOG.error(f"excinfo caught = {excinfo}")
+    LOG.exception("exception caught")
     assert isinstance(excinfo.value, WrappingException)
     assert excinfo.value.result.__class__ is QwikFireResult or NoneType
     assert str(excinfo.value) == "Failed executing command 'eko fubar'"
 
 
 def test_many_novar_fail():
+    result = None | QwikFireResult
     with pytest.raises(WrappingException) as excinfo:
         tc = AnnotatedTestClass()
-        tc.many_novar_fail()
+        result = tc.many_novar_fail()
+    LOG.debug(f"result = {result}")
+    result = excinfo.value.result
+    LOG.debug(f"result from exception = {result}")
+    LOG.debug(f"result.exception from exception = {excinfo.value.exception}")
+    # trunk-ignore(pyright/reportUnknownMemberType,pyright/reportAttributeAccessIssue)
+    LOG.debug(f"result.exception.exit_code from exception = {excinfo.value.exception.exit_code}")
+    LOG.debug(f"result.exit_code from exception result = {result.exit_code}")
     LOG.error(f"excinfo caught = {excinfo}")
     assert isinstance(excinfo.value, WrappingException)
     assert excinfo.value.result.__class__ is QwikFireResult or NoneType

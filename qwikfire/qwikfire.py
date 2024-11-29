@@ -5,7 +5,7 @@ from functools import wraps
 from shlex import split
 from typing import Any, Callable, Concatenate, Final, Optional, ParamSpec, TypeVar
 
-from sh import Command, CommandNotFound, RunningCommand
+from sh import Command, CommandNotFound, ErrorReturnCode, RunningCommand
 
 LOG = logging.getLogger()
 LOG.setLevel(logging.INFO)
@@ -114,6 +114,8 @@ def _substitute_all(command: str, **kwargs: Any) -> str:
 class QwikFireResult:
     """The run results of both single and multiple commands in an @qwikfire annotation"""
 
+    _exception: None | Exception
+
     def __init__(self, annotated_instance: Any, commands: RunningCommand):
         """Creates an instance of QwikFireResult with its first mandatory command
 
@@ -124,6 +126,10 @@ class QwikFireResult:
         self._annotated_instance: Final[Any] = annotated_instance
         self._results: Final[list[RunningCommand]] = []
         self._results.append(commands)
+        self._exception = None
+
+    def exception(self, exception: Exception) -> None:
+        self._exception = exception
 
     def append(self, command: RunningCommand):
         """Append RunningCommands, used by annotations with more than one command
@@ -147,17 +153,36 @@ class QwikFireResult:
         else:
             return self._results[index]
 
+    def _stdout(self) -> bytes:
+        output: bytes = b""
+        for r in self._results:
+            output += r.stdout
+        return output
+
     def concat_stdout(self) -> bytes:
         """Concatenates all command output to stdout into a single buffer
 
         Returns:
             bytes: a single buffer with every command's stdout appended
         """
-        if len(self._results) == 1:
-            return self._results[0].stdout
+        retval: bytes = self._stdout()
+
+        if self._exception is None:
+            return retval
+        elif isinstance(self._exception, CommandNotFound):
+            retval += f"command not found '{self._exception}'".encode()
+            return retval
+        elif isinstance(self._exception, ErrorReturnCode):
+            retval += f"non-zero return code exception = '{self._exception}'".encode()
+            return retval
+        else:
+            retval += f"unknown exception = '{self._exception}'".encode()
+            return retval
+
+    def _stderr(self) -> bytes:
         output: bytes = b""
         for r in self._results:
-            output += r.stdout
+            output += r.stderr
         return output
 
     def concat_stderr(self) -> bytes:
@@ -166,12 +191,19 @@ class QwikFireResult:
         Returns:
             bytes: a single buffer with every command's stderr appended
         """
-        if len(self._results) == 1:
-            return self._results[0].stderr
-        output: bytes = b""
-        for r in self._results:
-            output += r.stderr
-        return output
+        retval: bytes = self._stderr()
+
+        if self._exception is None:
+            return retval
+        elif isinstance(self._exception, CommandNotFound):
+            retval += f"command not found '{self._exception}'".encode()
+            return retval
+        elif isinstance(self._exception, ErrorReturnCode):
+            retval += f"non-zero return code exception = '{self._exception}'".encode()
+            return retval
+        else:
+            retval += f"unknown exception = '{self._exception}'".encode()
+            return retval
 
     @property
     def results(self) -> list[RunningCommand]:
@@ -201,18 +233,38 @@ class QwikFireResult:
         Returns:
             int: the exit code of the command
         """
-        if index is None:
+        if self._exception and isinstance(self._exception, CommandNotFound):
+            return 1
+        elif self._exception and isinstance(self._exception, ErrorReturnCode):
+            # trunk-ignore(pyright/reportUnknownMemberType,pyright/reportAttributeAccessIssue)
+            return self._exception.exit_code
+        elif self._exception:
+            return 255
+        elif index is None:
             return self._results[0].exit_code
         else:
             return self._results[index].exit_code
 
     @property
     def exit_codes(self) -> int:
-        """Add all exit codes into one value (analogous to concat_std[out|err])
+        """If all commands are successful, returns the sum of all exit_codes which will
+        almost always be zero unless `sh` _ok_codes kwarg is used.
+
+        If an exception is raised, returns the value of the last command's exception, returns
+        1 if command was not found or 255 on unknown exception types.
 
         Returns:
-            int: the sum of all command result exit codes
+            int: 1 if a command was not found, or the exit code of the last failing command,
+                or the sum of all command result exit codes (zero unless _ok_codes are used)
         """
+        if self._exception and isinstance(self._exception, CommandNotFound):
+            return 1
+        elif self._exception and isinstance(self._exception, ErrorReturnCode):
+            # trunk-ignore(pyright/reportUnknownMemberType,pyright/reportAttributeAccessIssue)
+            return self._exception.exit_code
+        elif self._exception:
+            return 255
+
         if len(self._results) == 1:
             return self._results[0].exit_code
         output: int = 0
@@ -325,6 +377,8 @@ class QwikFire:
             wrapper_exception = self._exception.__new__(self._exception)
             wrapper_exception.__init__(f"Failed executing command '{cmd}'", raised, annotated_instance)
             wrapper_exception.result = qfr  # for the sake of earlier run commands
+            if qfr:
+                qfr.exception(raised)
             raise wrapper_exception from raised
 
         # run the command providing additional arguments
@@ -336,6 +390,8 @@ class QwikFire:
             wrapper_exception = self._exception.__new__(self._exception)
             wrapper_exception.__init__(f"Failed executing command '{cmd}'", raised, annotated_instance)
             wrapper_exception.result = qfr  # for the sake of earlier run commands
+            if qfr:
+                qfr.exception(raised)
             raise wrapper_exception from raised
 
         # create a QFR inst if not already created and append each command's results
@@ -359,7 +415,7 @@ class QwikFire:
         # use sh_defaults if provided by the annotated user defined class
         sh_defaults = getattr(annotated_instance, "sh_defaults", None)
         if callable(sh_defaults):
-            defaults = annotated_instance.sh_defaults()
+            defaults = annotated_instance.sh_defaults(self._function)
             LOG.info(f"Using shell and variable defaults from {self}: '{defaults}'")
             for arg in defaults:
                 if not kwargs.get(arg):

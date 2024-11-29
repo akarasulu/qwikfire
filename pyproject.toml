@@ -36,11 +36,17 @@ include = ["qwikfire"]
 typeCheckingMode = "strict"
 reportUnknownVariableType = false
 reportUnknownArgumentType = false
+reportUnknownMemberType = false
+reportAttributeAccessIssue = false
 venvPath = "."
 venv = ".venv"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+log_cli = true
+log_cli_level = "DEBUG"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 
 [tool.ruff]
 exclude = ["typings"]

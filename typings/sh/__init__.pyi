@@ -375,7 +375,7 @@ def get_exc_exit_code_would_raise(
     exit_code, ok_codes, sigpipe_ok
 ):  # -> type[ErrorReturnCode] | type[__class_ErrorReturnCodeMeta] | None:
     ...
-def handle_process_exit_code(exit_code):  # -> int:
+def handle_process_exit_code(exit_code) -> int:
     """this should only ever be called once for each child process"""
     ...
 
