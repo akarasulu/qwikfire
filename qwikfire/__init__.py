@@ -11,10 +11,12 @@ Example:
   specific WrappingException which extends QwikFireException, and re-raised::
 
     class WrappingException(QwikFireException):
-    ...
-    @qwikfire(WrappingException, "echo {{hello_var}}", "echo {{world_var}}")
-    def many_twovars(self, qf: QwikFire) -> str:
-      return qf.run(self, hello_var="hello", world_var="world").stripped
+      pass
+
+    class MyAnnotatedClass:
+      @qwikfire(WrappingException, "echo {{hello_var}}", "echo {{world_var}}")
+      def many_twovars(self, qf: QwikFire) -> str:
+        return qf.run(self, hello_var="hello", world_var="world").stripped
 
     ...
     # invoking the method without the (hidden) QwikFire argument
