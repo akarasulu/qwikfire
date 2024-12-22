@@ -34,7 +34,7 @@ class AnnotatedTestClassNoShDefaults:
         assert proc.result() == proc.result(0)
         assert check_stderr(proc, False)
         assert qf.function.__name__ == "single_novars"
-        assert proc.exit_codes == 0
+        assert proc.exit_codes() == 0
         assert qf.raises == WrappingException
         return proc.stripped
 
@@ -56,7 +56,7 @@ class AnnotatedTestClass:
             proc: QwikFireResult = qf.run(self, _env={})
         except WrappingException as we:
             LOG.exception("Exception caught")
-            assert we.exception.__class__ == sh.CommandNotFound
+            assert we.wrapped_exception.__class__ == sh.CommandNotFound
             assert we.annotated_instance == self
             raise we from None
         return proc.stripped
@@ -67,7 +67,7 @@ class AnnotatedTestClass:
         proc: QwikFireResult = qf.run(self, _env={})
         assert proc.result() == proc.result(0)
         assert check_stderr(proc, False)
-        assert proc.exit_codes == 0
+        assert proc.exit_codes() == 0
         assert qf.raises == WrappingException
         return proc.stripped
 
@@ -96,7 +96,7 @@ class AnnotatedTestClass:
         result = qf.run(self, test_var=" not  again   5 ")
         assert result.stripped != result.stdout
         # without the lstrip() and rstrip()
-        return result.stdout
+        return result.stdout()
 
     @qwikfire(WrappingException, "echo {{fee}} {{fii}} {{foe}} {{fum}}")
     def single_manyvars(self, qf: QwikFire) -> str:
@@ -114,14 +114,34 @@ class AnnotatedTestClass:
         assert not result.concat_stderr()
         assert len(result.results) == 2
         assert result.annotated_instance == self
-        assert result.exit_code == 0
-        assert result.exit_codes == 0
-        assert len(result.stderr) == 0
+        assert result.exit_code() == 0
+        assert result.exit_codes() == 0
+        assert len(result.stderr()) == 0
         return result.stripped
 
     @qwikfire(WrappingException, "true", "false")
     def many_novar_fail(self, qf: QwikFire) -> QwikFireResult:
-        return qf.run(self, hello_var="hello", world_var="world")
+        return qf.run(self)
+
+    @qwikfire(WrappingException, "echo fubar", "bad123")
+    def test_command_not_found(self, qf: QwikFire, foo: str) -> QwikFireResult:
+        return qf.run(self)
+
+    @qwikfire(WrappingException, "false")
+    def test_error_return_code(self, qf: QwikFire) -> QwikFireResult:
+        return qf.run(self)
+
+    @qwikfire(WrappingException, "true", "false")
+    def test_error_return_code2(self, qf: QwikFire) -> QwikFireResult:
+        return qf.run(self)
+
+    @qwikfire(WrappingException, "true", "bogus")
+    def test_error_return_code3(self, qf: QwikFire) -> QwikFireResult:
+        return qf.run(self)
+
+    @qwikfire(WrappingException, "true")
+    def test_error_return_code4(self, qf: QwikFire) -> QwikFireResult:
+        raise ValueError
 
 
 def test_single_novars():
@@ -171,11 +191,112 @@ def test_many_novar_fail():
     LOG.debug(f"result = {result}")
     result = excinfo.value.result
     LOG.debug(f"result from exception = {result}")
-    LOG.debug(f"result.exception from exception = {excinfo.value.exception}")
+    LOG.debug(f"result.exception from exception = {excinfo.value.wrapped_exception}")
     # trunk-ignore(pyright/reportUnknownMemberType,pyright/reportAttributeAccessIssue)
-    LOG.debug(f"result.exception.exit_code from exception = {excinfo.value.exception.exit_code}")
+    LOG.debug(f"result.exception.exit_code from exception = {excinfo.value.wrapped_exception.exit_code}")
     LOG.debug(f"result.exit_code from exception result = {result.exit_code}")
     LOG.error(f"excinfo caught = {excinfo}")
     assert isinstance(excinfo.value, WrappingException)
     assert excinfo.value.result.__class__ is QwikFireResult or NoneType
     assert str(excinfo.value) == "Failed executing command 'false'"
+
+def test_command_not_found():
+    result = None | QwikFireResult
+    with pytest.raises(WrappingException) as excinfo:
+        tc = AnnotatedTestClass()
+        result = tc.test_command_not_found("bogus")
+    LOG.debug(f"result = {result}")
+    result = excinfo.value.result
+    LOG.debug(f"result from exception = {result}")
+    LOG.debug(f"result.exception from exception = {excinfo.value.wrapped_exception}")
+    assert isinstance(excinfo.value.wrapped_exception, sh.CommandNotFound)
+    LOG.debug(f"result.exit_code from exception result = {result.exit_code}")
+    LOG.error(f"excinfo caught = {excinfo}")
+    assert isinstance(excinfo.value, WrappingException)
+    assert excinfo.value.result.__class__ is QwikFireResult or NoneType
+    assert str(excinfo.value) == "Failed executing command 'bad123'"
+    if result:
+        LOG.debug(f"stdout = {result.stdout()}")
+        LOG.debug(f"stderr = {result.stderr()}")
+        LOG.debug(f"stdout = {result.stdout('UTF-8')}")
+        LOG.debug(f"stderr = {result.stderr('UTF-8')}")
+        LOG.debug(f"exit_code = {result.exit_code()}")
+        LOG.debug(f"exit_codes = {result.exit_codes()}")
+
+def test_error_return_code():
+    result = None | QwikFireResult
+    with pytest.raises(WrappingException) as excinfo:
+        tc = AnnotatedTestClass()
+        result = tc.test_error_return_code()
+    LOG.error(f"excinfo caught                  = {excinfo}")
+    LOG.debug(f"returned result                 = {result}")
+    LOG.debug(f"excinfo value exception         = {excinfo.value.result}")
+    assert isinstance(excinfo.value.wrapped_exception, sh.ErrorReturnCode)
+    assert isinstance(excinfo.value, WrappingException)
+    assert excinfo.value.result.__class__ is QwikFireResult or NoneType
+    assert str(excinfo.value) == "Failed executing command 'false'"
+
+def test_error_return_code2():
+    result = None | QwikFireResult
+    with pytest.raises(WrappingException) as excinfo:
+        tc = AnnotatedTestClass()
+        result = tc.test_error_return_code2()
+    LOG.error(f"excinfo caught                  = {excinfo}")
+    LOG.debug(f"returned result                 = {result}")
+    LOG.debug(f"excinfo value exception         = {excinfo.value.result}")
+    assert isinstance(excinfo.value, WrappingException)
+    assert excinfo.value.result.__class__ is QwikFireResult or NoneType
+    assert str(excinfo.value) == "Failed executing command 'false'"
+    if excinfo.value.result:
+        result = excinfo.value.result
+        exception = result.raised_exception
+        assert exception
+        assert exception.wrapped_exception
+        assert isinstance(exception.wrapped_exception, sh.ErrorReturnCode)
+
+        LOG.debug(f"stdout = {result.stdout()}")
+        LOG.debug(f"stderr = {result.stderr()}")
+        LOG.debug(f"stdout = {result.stdout('UTF-8')}")
+        LOG.debug(f"stderr = {result.stderr('UTF-8')}")
+        LOG.debug(f"exit_code = {result.exit_code()}")
+        LOG.debug(f"exit_codes = {result.exit_codes()}")
+
+def test_error_return_code3():
+    result = None | QwikFireResult
+    with pytest.raises(WrappingException) as excinfo:
+        tc = AnnotatedTestClass()
+        result = tc.test_error_return_code3()
+    LOG.error(f"excinfo caught                  = {excinfo}")
+    LOG.debug(f"returned result                 = {result}")
+    LOG.debug(f"excinfo value exception         = {excinfo.value.result}")
+    assert isinstance(excinfo.value, WrappingException)
+    assert excinfo.value.result.__class__ is QwikFireResult or NoneType
+    assert str(excinfo.value) == "Failed executing command 'bogus'"
+    if excinfo.value.result:
+        result = excinfo.value.result
+        exception = result.raised_exception
+        assert exception
+        assert exception.wrapped_exception
+        assert isinstance(exception.wrapped_exception, sh.CommandNotFound)
+
+        LOG.debug(f"stdout = {result.stdout()}")
+        LOG.debug(f"stderr = {result.stderr()}")
+        LOG.debug(f"stdout = {result.stdout('UTF-8')}")
+        LOG.debug(f"stderr = {result.stderr('UTF-8')}")
+        LOG.debug(f"exit_code = {result.exit_code()}")
+        LOG.debug(f"exit_codes = {result.exit_codes()}")
+
+def test_error_return_code4():
+    result = None | QwikFireResult
+    with pytest.raises(WrappingException) as excinfo:
+        tc = AnnotatedTestClass()
+        result = tc.test_error_return_code4()
+    LOG.error(f"excinfo caught                  = {excinfo}")
+    LOG.debug(f"returned result                 = {result}")
+    assert isinstance(excinfo.value, WrappingException)
+    assert str(excinfo.value) == "'<class 'ValueError'>' exception raised when executing decorated function 'AnnotatedTestClass.test_error_return_code4'"
+    if excinfo.value:
+        exception = excinfo.value
+        assert exception
+        assert exception.wrapped_exception
+        assert isinstance(exception.wrapped_exception, ValueError)
